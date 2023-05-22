@@ -138,11 +138,12 @@ class EarthDataLocalAccess:
         tiles_between = self.FindIntermediateTiles(bl, tr)
         for tile in tiles_between:
             tile_str = f'{tile[0]:02d}{tile[1]}{tile[2]}{tile[3]}'
-            for quantity in self.db[var][tile_str]:
-                for date in self.db[var][tile_str][quantity]:
-                    if sdate <= date and edate >= date:
-                        results.append((tile, quantity, self.db[var][tile_str][quantity][date]))
-                        continue
+            if tile_str in self.db[var]:
+                for quantity in self.db[var][tile_str]:
+                    for date in self.db[var][tile_str][quantity]:
+                        if sdate <= date and edate >= date:
+                            results.append((tile, quantity, self.db[var][tile_str][quantity][date]))
+                            continue
         return((var, results))
 
 class EarthDataAdapter:
@@ -159,7 +160,7 @@ class EarthDataAdapter:
     def ProjectMeasurement(self, measurement, projection, resolution):
         root_ext = os.path.splitext(measurement)
         proj_file = f'{root_ext[0]}.{resolution}{root_ext[1]}'
-        gdap.Warp(proj_file, measurement, dstSRS = projection, xRes = resolution, yRes = resolution)
+        gdal.Warp(proj_file, measurement, dstSRS = projection, xRes = resolution, yRes = resolution)
         return(proj_file)
 
     def GetSubset(self, proj_file, projection, lb, ub, resolution):
@@ -168,7 +169,6 @@ class EarthDataAdapter:
         xres = resolution
         yres = -resolution
         tl = (min(lb[0], ub[0]), max(lb[1], ub[1]) + resolution)
-        print(f'tl: {tl}')
         ret_offset = [0, 0]
         size = [int(abs(ub[0] - lb[0]) / resolution), int(abs(ub[1] - lb[1]) / resolution)]
         offset = [int((tl[0] - geo[0]) / xres), int((tl[1] - geo[3]) / yres)]
@@ -181,9 +181,9 @@ class EarthDataAdapter:
             ret_offset[1] = -offset[1]
             offset[1] = 0
         if (offset[0] + size[0]) > dat.RasterXSize:
-            size[0] = dat.GetXSize() - offset[0]
+            size[0] = dat.RasterXSize - offset[0]
         if (offset[1] + size[1]) > dat.RasterYSize:
-            size[1] = dat.GetYSize() - offset[1]
+            size[1] = dat.RasterYSize - offset[1]
 
         if size[0] > 0 and size[1] > 0:
             arr = dat.ReadAsArray(xoff = offset[0], yoff = offset[1], xsize = size[0], ysize = size[1])
@@ -197,7 +197,6 @@ class EarthDataAdapter:
         ub = GetSRCoord(lon2, lat2, projection)
         width = int(abs(lb[0] - ub[0]) / resolution)
         height = int(abs(lb[1] - ub[1]) / resolution)
-        print(f'lb: {lb}, ub: {ub}, width: {width}, height: {height}')
         results = {}
         proj_file = None
         (var, products) = query_results
@@ -213,7 +212,8 @@ class EarthDataAdapter:
                 path, file = os.path.split(proj_file)
                 metadata = file.split('.')
                 date = parser.isoparse(metadata[3])
-                self.db[var][tile][quantity][date].append((resolution, projection, False, proj_file))
+                tile_str = f'{tile[0]:02d}{tile[1]}{tile[2]}{tile[3]}'
+                self.api.db[var][tile_str][quantity][date].append((resolution, projection, False, proj_file))
             subset, offset = self.GetSubset(proj_file, projection, lb, ub, resolution)
             if not subset is None:
                 if quantity not in results:
