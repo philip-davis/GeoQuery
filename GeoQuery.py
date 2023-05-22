@@ -143,7 +143,7 @@ class EarthDataLocalAccess:
                     for date in self.db[var][tile_str][quantity]:
                         if sdate <= date and edate >= date:
                             results.append((tile, quantity, self.db[var][tile_str][quantity][date]))
-                            continue
+                            break
         return((var, results))
 
 class EarthDataAdapter:
@@ -184,7 +184,6 @@ class EarthDataAdapter:
             size[0] = dat.RasterXSize - offset[0]
         if (offset[1] + size[1]) > dat.RasterYSize:
             size[1] = dat.RasterYSize - offset[1]
-
         if size[0] > 0 and size[1] > 0:
             arr = dat.ReadAsArray(xoff = offset[0], yoff = offset[1], xsize = size[0], ysize = size[1])
         else:
@@ -198,13 +197,12 @@ class EarthDataAdapter:
         width = int(abs(lb[0] - ub[0]) / resolution)
         height = int(abs(lb[1] - ub[1]) / resolution)
         results = {}
-        proj_file = None
         (var, products) = query_results
         for tile, quantity, measurements in products:
+            proj_file = None
             for (res, proj, native, path) in measurements:
                 if res == resolution and f'EPSG:{proj}' == projection:
                     proj_file = path
-                    break
                 elif native:
                     to_reproj = path
             if proj_file == None:
