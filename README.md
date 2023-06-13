@@ -42,15 +42,34 @@ Other arguments to `GeoInterface.Query()` (all required):
 * `projection`: a string containing an [EPSG](https://en.wikipedia.org/wiki/EPSG_Geodetic_Parameter_Dataset) projection, e.g. `EPSG:32610`
 * `resolution`: per-pixel resolution, in meters
 
-
+The arguments together imply a two-dimensional grid: a pair of geographic coordinates on a projection define a rectangle (disregarding elevation), and that rectangle can be overlayed with a grid with an average spacing of `resolution`. The variance and regularity of this spacing will depend on the appropriateness of the chosen projection. `GeoInterface.Query()` returns one or more [ND-arrays](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html) as a Python dictionary. Most geospatial respositories provide multiple quantities in their raw data; each will have its own grid of the same dimensions. The query handles this by returning an array over the same grid for each quantity, and organizing these into a dictionary with the keys being the repository-provided quantity names.
 
 ## Adapters
+We provide two example adapters, one for accessing [HLS](https://hls.gsfc.nasa.gov) data from the [EarthData](https://www.earthdata.nasa.gov) repository, and another for accessing [Sentinel](https://sentinels.copernicus.eu/web/sentinel/missions/sentinel-1) data from the [Copernicus SciHub](https://scihub.copernicus.eu). 
 
 ### Sentinel
-Copernicus login and password need to be set in environment variables:
+The Sentinel adaptor is provided by objects of the `SentinelAdapter` class. There are no arguments to this class.
 
-`DS_SENTINEL_USERNAME`
-`DS_SENTINEL_PWD`
+To use the Sentinel adaptor, it is necessary to have a user credentials with SciHub. This can be created by following the [user guide instructions](https://scihub.copernicus.eu/userguide/SelfRegistration). These credentials should be placed in the following environment variables before running a Query:
+
+* `DS_SENTINEL_USERNAME`: the username on SciHub
+* `DS_SENTINEL_PWD`: the password for SciHub
+
+### HLS
+To use the HLS adapter, a data provider must be prepared. This data provider can either be [downloaded](https://search.earthdata.nasa.gov/search?q=HLS%20Daily%20Global) into a local directory or a remote [OSF](https://osf.io/) repository. The data should be organized within the data provider in a two-layer directory structure according to the first two coordinates in its MGRS tile coordinate. An example of this organization can be seen in the [geoquery_labels](https://osf.io/v4uz9/) provider. A utility `file_earthdata.py` is provided to perform this organization automatically on a local directory. The usage of this utility is:
+
+`file_earthdata.py <source_dir> <target_dir>`
+
+where **source_dir** is a directory containing geotiff files downloaded from EarthData in a flat structure, and **target_dir** is the directroy into which the two-layer structure will be built. For example,
+
+`file_earthdata.py ~/Downloads/hls_data ./earthdata`
+
+will result in a directory structure being built in the `earthdata` folder, into which is copied all the geotiff files in `~/Downloads/hls_data` that have the naming structure used by EarthData.
+
+The HLS adapter is provied by objects of the `EarthDataAdapter` class. Two arguments can be passed when creating an `EarthDataAdapter()` object:
+
+* `directory`: the location of the data. The interpretation of this is provider-specific. For a `local` provider, the directory is where the two-layer directory structure can be found (typically the value of **target_dir** used with the `file_earthdata.py` utility.
+* `provider`: the provider type to be used. Possible values are `local`, which indicates the raw geospatial imagery can be found on a local file, or 'osf', which indicates the data can be found in an OSF repository. Default is `local`.
 
 Example:
 `python3 GeoQuery.py -121.827 46.805 -121.6255 46.92621 20230228 20230301 EPSG:32610 30`
