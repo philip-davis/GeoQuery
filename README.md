@@ -29,10 +29,10 @@ geo.AddAdapter("sentinel", SentinelAdapter())
 
 Adds an adapter for accessing the Sentinel data repository from ESA. This repository can later be targeted in queries using the assigned name:
 ```
-geo.Query("sentinel^instrument=sar,product=slc", lon1, lat1, lon2, lat2, sdate, edate, projection, resolution)
+geo.Query(target="sentinel^instrument=sar,product=slc", lon1, lat1, lon2, lat2, sdate, edate, projection, resolution)
 ```
 
-The first argument to query is a string that tells the GeoInterface which repository to query. The part before the carot (`sentinel` in this case) is a reference to the name assigned in `AddAdapter()`. The comma separated list of key/value pairs after the carot are adapter-specific arguments.
+The `target` argument to query is a string that tells the GeoInterface which repository to query. The part before the carot (`sentinel` in this case) is a reference to the name assigned in `AddAdapter()`. The comma separated list of key/value pairs after the carot are adapter-specific arguments.
 
 Other arguments to `GeoInterface.Query()` (all required):
 * `lon1`, `lat1`: The lower-left corner of the geographic area being requested
@@ -70,6 +70,16 @@ The HLS adapter is provied by objects of the `EarthDataAdapter` class. Two argum
 
 * `directory`: the location of the data. The interpretation of this is provider-specific. For a `local` provider, the directory is where the two-layer directory structure can be found (typically the value of **target_dir** used with the `file_earthdata.py` utility.
 * `provider`: the provider type to be used. Possible values are `local`, which indicates the raw geospatial imagery can be found on a local file, or 'osf', which indicates the data can be found in an OSF repository. Default is `local`.
+
+## Target Modifiers
+The target parameter of `GeoInterface.Query()` is semantically significant, starting with an adapter name followed by a carot, followed by a comma-separted list of `<key>=<value>` modifiers. These modifiers are adapter-specific.
+
+### Sentinel Adapter Modifiers:
+  * `instrument`: A valid short name for a Sentinel-1 instrument, currently only supports `SAR`
+  * `product`: A valid product type for Sentinel-1, for example `SLC`
+
+### EarthData Adapter Modifiers:
+There are currently no modifieres implemented for the EarthData adapter.
 
 Example:
 `python3 GeoQuery.py -121.827 46.805 -121.6255 46.92621 20230228 20230301 EPSG:32610 30`
