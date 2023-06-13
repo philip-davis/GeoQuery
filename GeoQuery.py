@@ -1,3 +1,4 @@
+import osfclient
 from geojson import Polygon
 from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
 import mgrs
@@ -14,6 +15,14 @@ def char_range(c1, c2):
     """Generates the characters from `c1` to `c2`, inclusive."""
     for c in range(ord(c1), ord(c2)+1):
         yield chr(c)
+
+def get_tile(name):
+    metadata = f.split('.')
+    if metadata[-1] == 'tif' or metadata[-1] == 'tiff':
+        tile = metadata[2][1:]
+        return(tile[0:-2], tile[-2:])
+    else:
+        return(None, None)
 
 def GetSRCoord(lon, lat, projection):
     source = osr.SpatialReference()
@@ -76,6 +85,66 @@ class EarthDataBoxQuery:
     def GetProductList(self):
         self.products = self.api.Query(self.bl, self.tr, self.sdate, self.edate, self.var)
         return(self.products)
+
+class EarthDataOSFAccess:
+    def __init__(self, directory):
+        self.project = directory
+        self.osf = osfclient.OSF()
+        with open('mgrs_idx.pkl', 'rb') as mgrsf:
+            self.mdb = pickle.load(mgrsf)
+        self.db = {}
+        p = self.osf.project(self.project)
+        for s in p.storages:
+            for f in s.files:
+                fname = f.path
+                fparts = fname.split('/')
+                if len(fparts) == 4:
+                    first = fparts[1]
+                    second = fparts[2]
+                    metadata = fparts[3].split('.')
+                    if metadata[-1] == 'tif' or metadata[-1] == 'tiff':
+                        var = metadata[0].upper()
+                        tile = metadata[2][1:]
+                        quant = metadata[6]
+                        if var not in self.db:
+                            self.db[var] = {}
+                        date = parser.isoparse(metadata[3])
+                        if tile not in self.db[var]:
+                            self.db[var][tile] = {}
+                        if quant not in self.db[var][tile]:
+                            self.db[var][tile][quant] = {}
+                        if date not in self.db[var][tile][quant]:
+                            self.db[var][tile][quant][date] = []
+                        self.db[var][tile][quant][date].append((-1, '', True, f))
+
+    def FindIntermediateTiles(self, bl, tr):
+        results = []
+        bl_offset = self.mdb[(bl[0], bl[1])][(bl[2], bl[3])]
+        tr_offset  = self.mdb[(tr[0], tr[1])][(tr[2], tr[3])]
+        for first in range(bl[0], tr[0] + 1):
+            for second in char_range(bl[1], tr[1]):
+                tiles = self.mdb[(first, second)]
+                for tile in tiles:
+                    tile_offset = tiles[tile]
+                    if (first == bl[0] and tile_offset[0] < bl_offset[0]) or (second == bl[1] and tile_offset[1] < bl_offset[1]):
+                        continue
+                    elif (first == tr[0] and tile_offset[0] > tr_offset[0]) or (second == tr[1] and tile_offset[1] > tr_offset[1]):
+                        continue
+                    results.append((first, second, tile[0], tile[1]))
+        return(results)
+
+    def Query(self, bl, tr, sdate, edate, var):
+        results = []
+        tiles_between = self.FindIntermediateTiles(bl, tr)
+        for tile in tiles_between:
+            tile_str = f'{tile[0]:02d}{tile[1]}{tile[2]}{tile[3]}'
+            if tile_str in self.db[var]:
+                for quantity in self.db[var][tile_str]:
+                    for date in self.db[var][tile_str][quantity]:
+                        if sdate <= date and edate >= date:
+                            results.append((tile, quantity, self.db[var][tile_str][quantity][date]))
+                            break
+        return({'var': var, 'project': self.project, 'results': results})
 
 class EarthDataLocalAccess:
     def __init__(self, directory):
@@ -144,23 +213,64 @@ class EarthDataLocalAccess:
                         if sdate <= date and edate >= date:
                             results.append((tile, quantity, self.db[var][tile_str][quantity][date]))
                             break
-        return((var, results))
+        return({'var': var, 'results': results})
 
 class EarthDataAdapter:
-    def __init__(self, directory):
+
+    def __init__(self, directory, provider = 'local'):
         self.dir = directory
-        self.api = EarthDataLocalAccess(self.dir)
+        self.provider = provider
+        if provider == 'local':
+            self.api = EarthDataLocalAccess(self.dir)
+        elif provider == 'osf':
+            self.api = EarthDataOSFAccess(self.dir)
+        else:
+            raise ValueError(f"unknown provider: {provider}")
     
     def CreateQuery(self, target, lon1, lat1, lon2, lat2, sdate, edate):
         return(EarthDataBoxQuery(self.api, target, lon1, lat1, lon2, lat2, sdate, edate))
 
-    def GetProducts(self, products):
-        pass
+    def GetProducts(self, query_result):
+        if self.provider == 'osf':
+            project = query_result['project']
+            products = query_result['results']
+            if not os.path.exists(project):
+                os.mkdir(project)
+            if not os.path.isdir(project):
+                raise FileExistsError(f'{project} exists, but is not a directory!')
+            for tile, quantity, measurements in products:
+                dl_products = []
+                for (ignored, ignored, ignored, file) in measurements:
+                    inner = f'{project}/{tile[0]}{tile[1]}'
+                    outer = f'{inner}/{tile[2]}{tile[3]}'
+                    if not os.path.exists(inner):
+                         os.mkdir(inner)
+                    if not os.path.isdir(inner):
+                        raise FileExistsError(f'{inner} exists, but is not a directory!')
+                    if not os.path.exists(outer):
+                        os.mkdir(outer)
+                    if not os.path.isdir(outer):
+                        raise FileExistsError(f'{outer} exists, but is not a directory!')
+                    srcfile = file.path.split('/')[-1]
+                    tgtfile = f'{outer}/{srcfile}'
+                    if not os.path.exists(tgtfile):
+                        with open(tgtfile, 'wb') as fp:
+                            file.write_to(fp)
+                    dat = gdal.Open(tgtfile)
+                    geo = dat.GetGeoTransform()
+                    res = geo[1]
+                    native = True
+                    ref = dat.GetSpatialRef()
+                    proj = ref.GetAuthorityCode('PROJCS')
+                    dl_products.append((res, proj, native, tgtfile))
+                measurements.clear()
+                measurements.extend(dl_products)
 
     def ProjectMeasurement(self, measurement, projection, resolution):
         root_ext = os.path.splitext(measurement)
         proj_file = f'{root_ext[0]}.{resolution}{root_ext[1]}'
-        gdal.Warp(proj_file, measurement, dstSRS = projection, xRes = resolution, yRes = resolution)
+        if not os.path.exists(proj_file):
+            gdal.Warp(proj_file, measurement, dstSRS = projection, xRes = resolution, yRes = resolution)
         return(proj_file)
 
     def GetSubset(self, proj_file, projection, lb, ub, resolution):
@@ -197,7 +307,8 @@ class EarthDataAdapter:
         width = int(abs(lb[0] - ub[0]) / resolution)
         height = int(abs(lb[1] - ub[1]) / resolution)
         results = {}
-        (var, products) = query_results
+        var = query_results['var']
+        products = query_results['results']
         for tile, quantity, measurements in products:
             proj_file = None
             for (res, proj, native, path) in measurements:
@@ -345,14 +456,12 @@ if __name__ == "__main__":
     res = float(sys.argv[8])
     geo = GeoInterface()
     sentinel = SentinelAdapter()
-    hls = EarthDataAdapter('earthdata')
+    hls = EarthDataAdapter('v4uz9', provider='osf')
     geo.AddAdapter("sentinel1", sentinel)
     geo.AddAdapter("hls", hls)
 
     #geo.Query("sentinel1^instrument=sar,product=slc", lon1, lat1, lon2, lat2, sdate, edate, projection, res)
     result = geo.Query('hls', lon1, lat1, lon2, lat2, sdate, edate, projection, res)
-    print(result)
     sentinel = None
     geo = None         
-
 
