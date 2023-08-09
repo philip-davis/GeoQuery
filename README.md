@@ -82,7 +82,7 @@ The target parameter of `GeoInterface.Query()` is semantically significant, star
 There are currently no modifieres implemented for the EarthData adapter.
 
 Example:
-`python3 GeoQuery.py -121.827 46.805 -121.6255 46.92621 20230228 20230301 EPSG:32610 30`
+`python3 multisource_test.py -121.827 46.805 -121.6255 46.92621 20230228 20230301 EPSG:32610 30`
 
 To use EarthData, `get_mgrs_idx.py` should be run to create the MGRS tile offset database file.
 
