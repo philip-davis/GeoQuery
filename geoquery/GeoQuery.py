@@ -8,6 +8,7 @@ from zipfile import ZipFile
 from dateutil import parser
 import numpy as np
 import pickle
+import atexit
 import sys
 import os
 
@@ -386,7 +387,11 @@ class EarthDataAdapter:
                     results[quantity].fill(0)
                 results[quantity][offset[1]:offset[1]+subset.shape[0], offset[0]:offset[0]+subset.shape[1]] = subset
         return(results)
-            
+    
+def WriteSentinelDb(db):
+    with open(".sentineldb", "wb") as file:
+        pickle.dump(db, file)
+
 class SentinelAdapter:
     def __init__(self):
         username = os.getenv('DS_SENTINEL_USERNAME')
@@ -397,9 +402,7 @@ class SentinelAdapter:
                 self.db = pickle.load(file)
         except FileNotFoundError:
             self.db = {}
-    def __del__(self):
-        with open(".sentineldb", "wb") as file:
-            pickle.dump(self.db, file)
+        atexit.register(WriteSentinelDb, self.db)
 
     def CreateQuery(self, target, lon1, lat1, lon2, lat2, sdate, edate):
         return(SentinelBoxQuery(self.api, target, lon1, lat1, lon2, lat2, sdate, edate))
