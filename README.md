@@ -1,6 +1,6 @@
 # GeoQuery
 
-GeoQuery is a library for accessing geospatial imagery across mutliple repositories using a single API.
+GeoQuery is a library for accessing geospatial imagery across mutliple repositories using a single API. GeoQuery is an ancillary interface library as part of the [FIRE-D ML framework](https://github.com/philip-davis/ML-FIRE-D).
 
 ## Prerequisites
 GeoQuery depends on the osgeo module, which is part of the [GDAL](https://gdal.org) package. Installing the gdal package requires pre-installing the gdal binaries on most platforms. Binaries are available for [download](https://gdal.org/download.html#binaries) for many different platforms, as well as source code.
